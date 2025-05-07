@@ -42,7 +42,7 @@ void setReference(uint8_t* data, uint8_t length);
 // Функции XBee
 void zbReceive(ZBRxResponse &rx, uintptr_t);
 void receiveMessage(uint8_t* data, uint8_t length);
-void parseMessage(uint8_t commandType);
+void parseMessage(const char* command, const char* value);
 void zbSend(uint8_t *payload, const uint8_t payloadLength);
 void sendMessage(const char* message);
 void sendMoisture();
@@ -68,44 +68,11 @@ unsigned int getValue() {
 }
 
 /**
- * Устанавливает референсное значение влажности на основе полученных данных
- * @param data Массив байт с командой и параметрами
- * @param length Длина массива данных
+ * Устанавливает референсное значение влажности
+ * @param value Новое значение влажности (0-100%)
  */
-void setReference(uint8_t* data, uint8_t length) {
+ void setReference(int newValue) {
     // Установить пороговое значение влажности
-    if (length < 3) {
-        debugPrintln("Ошибка: слишком короткие данные");
-        return;
-    }
-    
-    // Пропускаем первый байт (код команды)
-    // Ищем пробел после кода команды
-    int spaceIndex = -1;
-    for (int i = 1; i < length; i++) {
-        if (data[i] == ' ') {
-            spaceIndex = i;
-            break;
-        }
-    }
-    
-    if (spaceIndex == -1 || spaceIndex == length - 1) {
-        debugPrintln("Ошибка: неверный формат команды");
-        return;
-    }
-    
-    // Преобразуем оставшуюся часть в число
-    char valueStr[10] = {0};
-    int valueLen = 0;
-    
-    for (int i = spaceIndex + 1; i < length && valueLen < 9; i++) {
-        if (data[i] >= '0' && data[i] <= '9') {
-            valueStr[valueLen++] = data[i];
-        }
-    }
-    
-    int newValue = atoi(valueStr);
-    
     if (newValue >= 0 && newValue <= 100) {
         reference = newValue;
         debugPrint("Установлено новое эталонное значение влажности: ");
@@ -122,9 +89,19 @@ void setReference(uint8_t* data, uint8_t length) {
  * @return true, если нужен полив, false - если нет
  */
 bool shouldWater() {
-    // Принять решение о поливе растений
-    // TODO: Реализовать логику принятия решения о поливе на основе сенсоров влажности,
-    // погодных данных (rainSoon)
+    if (mode == ON) {
+        // Если режим включен вручную, всегда поливаем
+        return true;
+    }
+
+    // Если режим AUTO, проверяем условия для полива
+    if (mode == AUTO) {
+        // TODO: Реализовать логику принятия решения о поливе на основе сенсоров влажности
+        // и погодных данных (rainSoon)
+        return value < reference && !rainSoon;
+    }
+
+    // В режиме OFF полив не требуется
     return false;
 }
 
@@ -175,50 +152,69 @@ void zbReceive(ZBRxResponse &rx, uintptr_t) {
 void receiveMessage(uint8_t* data, uint8_t length) {
     if (length <= 0) return;
     
-    // Получаем первый байт как ASCII символ
-    uint8_t commandType = data[0];
-    
-    // Преобразуем ASCII символ в число
-    int commandValue;
-    
-    // Если это цифра в ASCII ('0'-'9')
-    if (commandType >= '0' && commandType <= '9') {
-        commandValue = commandType - '0';  // Преобразуем ASCII в число
-    } else {
-        // Если это не ASCII цифра, считаем что это уже бинарное значение
-        commandValue = commandType;
+    char message[length + 1];
+    memcpy(message, data, length);
+    message[length] = '\0';
+
+    // Находим знак '='
+    char* equalSign = strchr(message, '=');
+    if (equalSign == NULL) {
+        debugPrintln("Ошибка: неверный формат команды, отсутствует '='");
+        return;
     }
     
-    parseMessage(commandValue);
+    // Получаем префикс команды (до знака '=')
+    int prefixLength = equalSign - message;
+    char prefix[prefixLength + 1];
+    strncpy(prefix, message, prefixLength);
+    prefix[prefixLength] = '\0';
+    
+    // Получаем значение (после знака '=')
+    char* value = equalSign + 1;
+    
+    parseMessage(prefix, value);
 }
 
 /**
  * Разбор и обработка полученной команды
  * @param commandType Тип команды для выполнения
  */
-void parseMessage(uint8_t commandType) {
-    // Обработать команду
-    switch (commandType) {
-        case MSG_WATER_PLANTS:
-            debugPrintln("Команда: Полив растений");
-            waterPlants();
-            break;
-            
-        case MSG_SET_REFERENCE:
-            debugPrintln("Команда: Задать эталонное значение влажности");
-            // Передаем данные для обработки значения
-            setReference(rx_data, rx_length);
-            break;
-            
-        case MSG_SEND_WEATHER:
-            debugPrintln("Команда: Отправить погоду");
+ void parseMessage(const char* command, const char* value) {
+    if (strcmp(command, "MODE") == 0) {
+        debugPrint("Команда: Установка режима на ");
+        debugPrintln(value);
+        
+        if (strcmp(value, "OFF") == 0) {
+            mode = OFF;
+        } else if (strcmp(value, "AUTO") == 0) {
+            mode = AUTO;
+        } else if (strcmp(value, "ON") == 0) {
+            mode = ON;
+        } else {
+            debugPrintln("Ошибка: неизвестное значение режима");
+        }
+        
+        blinkLED(2, 100);
+    }
+    else if (strcmp(command, "STATUS") == 0) {
+        if (strcmp(value, "?") == 0) {
+            sendStatus();
+        }
+    }
+    else if (strcmp(command, "REFERENCE") == 0) {
+        debugPrintln("Команда: Задать эталонное значение влажности");
+        
+        int newValue = atoi(value);
+        setReference(newValue);
+    }
+    else if (strcmp(command, "VALUE") == 0) {
+        if (strcmp(value, "?") == 0) {
             sendMoisture();
-            break;
-            
-        default:
-            debugPrint("Неизвестная команда: ");
-            Serial.println(commandType);
-            break;
+        }
+    }
+    else {
+        debugPrint("Неизвестная команда: ");
+        Serial.println(command);
     }
 }
 
@@ -261,7 +257,7 @@ void sendMessage(const char* message) {
  */
 void sendXBee() {
     // Отправить стандартное сообщение хабу
-    sendMessage(DEFAULT_MESSAGE);
+    sendMoisture();
 }
 
 /**
@@ -273,10 +269,10 @@ void sendMoisture() {
     
     // TODO: Заменить на реальное значение от сенсора влажности почвы
     unsigned int sensorValue = getValue();
-    value = sensorValue;  // Сохраняем в глобальную переменную
+    value = sensorValue;
     
     char moistureStr[30];
-    sprintf(moistureStr, "Moisture: %d%%", (int)value);
+    sprintf(moistureStr, "VALUE=%d", (int)value);
     sendMessage(moistureStr);
 }
 
@@ -287,16 +283,23 @@ void sendStatus() {
     // Передать статус полива
     debugPrintln("Отправка статуса полива...");
     
-    // TODO: Добавить дополнительную информацию о состоянии системы полива
-    // Формируем строку статуса с текущими значениями
-    char statusStr[100];
-    sprintf(statusStr, "Status: Mode=%s, Moisture=%d%%, Reference=%d%%, RainSoon=%s", 
-            mode == OFF ? "OFF" : (mode == AUTO ? "AUTO" : "ON"),
-            (int)value,
-            (int)reference, 
-            rainSoon ? "Yes" : "No");
+    // Отправляем текущий режим
+    char modeStr[15];
+    sprintf(modeStr, "MODE=%s", mode == OFF ? "OFF" : (mode == AUTO ? "AUTO" : "ON"));
+    sendMessage(modeStr);
     
+    // Отправляем статус полива
+    char statusStr[15];
+    sprintf(statusStr, "STATUS=%s", (mode == ON || (mode == AUTO && value < reference)) ? "ON" : "OFF");
     sendMessage(statusStr);
+    
+    // Отправляем пороговое значение влажности
+    char referenceStr[20];
+    sprintf(referenceStr, "REFERENCE=%d", (int)reference);
+    sendMessage(referenceStr);
+    
+    // Отправляем текущее значение влажности
+    sendMoisture();
 }
 
 /* ===== Основные функции Arduino ===== */
@@ -330,21 +333,22 @@ void setup() {
 void loop() {
     // Обработка входящих XBee сообщений
     xbeeClient.loop();
+
+    // Получение значения влажности
+    value = getValue();
     
     // Периодическая отправка данных
     static unsigned long lastSendTime = 0;
     unsigned long currentTime = millis();
-    
+
     if (currentTime - lastSendTime > SEND_INTERVAL) {
         sendXBee();
         lastSendTime = currentTime;
     }
-    
-    // Получение значения влажности
-    value = getValue();
+
     
     // Проверка необходимости полива
-    if (mode == AUTO && shouldWater()) {
+    if (shouldWater()) {
         waterPlants();
     }
     
