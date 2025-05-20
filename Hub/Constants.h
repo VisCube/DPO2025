@@ -9,8 +9,8 @@
 constexpr char WIFI_SSID[] = "ESP32 Config";
 constexpr char WIFI_PASSWORD[] = "";
 
-constexpr char MQTT_TOPIC_REFERENCE[] = "humidity/reference";
-constexpr char MQTT_TOPIC_VALUE[] = "humidity/value";
+constexpr char MQTT_TOPIC_REFERENCE[] = "moisture/reference";
+constexpr char MQTT_TOPIC_VALUE[] = "moisture/value";
 constexpr char MQTT_TOPIC_MODE[] = "watering/mode";
 constexpr char MQTT_TOPIC_STATUS[] = "watering/status";
 constexpr char MQTT_TOPIC_WATER[] = "water/level";
