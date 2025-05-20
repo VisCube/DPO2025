@@ -138,7 +138,7 @@ int registerDevice() {
     const JsonArray sensors_float = docRequest["sensors_float"].to<JsonArray>();
     const JsonObject sensor1 = sensors_float.add<JsonObject>();
     sensor1["type"] = 1;
-    sensor1["topic"] = "humidity/value";
+    sensor1["topic"] = "moisture/value";
     sensor1["multiplier"] = 1;
     const JsonObject sensor2 = sensors_float.add<JsonObject>();
     sensor2["type"] = 7;
@@ -151,7 +151,7 @@ int registerDevice() {
     const JsonArray range = docRequest["range"].to<JsonArray>();
     const JsonObject range1 = range.add<JsonObject>();
     range1["type"] = 2;
-    range1["topic_cmd"] = "humidity/reference";
+    range1["topic_cmd"] = "moisture/reference";
     range1["topic_state"] = "";
     range1["max"] = 100;
     range1["min"] = 0;
@@ -159,7 +159,7 @@ int registerDevice() {
     range1["multiplier"] = 1;
     const JsonArray mode = docRequest["mode"].to<JsonArray>();
     const JsonObject mode1 = mode.add<JsonObject>();
-    mode1["type"] = 0;
+    mode1["type"] = 6;
     mode1["topic_cmd"] = "watering/mode";
     mode1["topic_state"] = "";
     mode1["options"] = "one=1,two=2,three=3";
