@@ -87,7 +87,7 @@ void checkPlants() {
     moisture /= sizeof(PIN_MOIST);
     zbSend(XBEE_COMMAND_VALUE, String(moisture).c_str());
 
-    const bool water = analogRead(PIN_WATER) == HIGH;
+    const bool water = digitalRead(PIN_WATER) == LOW;
     zbSend(XBEE_COMMAND_WATER, String(water).c_str());
 
     const bool should = shouldWater(moisture, water, rainSoon, config.mode);
@@ -102,6 +102,9 @@ void setup() {
     Serial2.begin(9600);
 
     loadConfig();
+
+    pinMode(PIN_WATER, INPUT_PULLUP);
+    pinMode(PIN_WATERING, OUTPUT);
 
     xbeeClient.setSerial(Serial2);
     xbeeClient.onZBRxResponse(zbReceive);
